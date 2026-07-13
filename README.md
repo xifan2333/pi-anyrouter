@@ -6,11 +6,11 @@ It currently supports both **Claude Code / Claude Agent SDK** requests and **Cod
 
 ## Status
 
-Confirmed working with provider `anyrouter-cc` using Claude and Codex model routes:
+Confirmed working with provider `anyrouter` using Claude and Codex model routes:
 
 ```bash
-pi --model anyrouter-cc/claude-opus-4-8 --no-session --no-tools -p "Reply with exactly OK"
-pi --model anyrouter-cc/gpt-5.6-sol --no-session --no-tools -p "Reply with exactly OK"
+pi --model anyrouter/claude-opus-4-8 --no-session --no-tools -p "Reply with exactly OK"
+pi --model anyrouter/gpt-5.6-sol --no-session --no-tools -p "Reply with exactly OK"
 ```
 
 Expected output:
@@ -34,7 +34,7 @@ This package selects an adapter by model family:
 
 ## Features
 
-- Registers provider: `anyrouter-cc`
+- Registers provider: `anyrouter`
 - Supports Claude Code and Codex Responses Lite request validation
 - No local relay/proxy required
 - Converts tool names to Claude Code naming
@@ -84,8 +84,8 @@ pi install git:github.com/xifan2333/pi-anyrouter@<tag>
 
 If you only want the extension file layout, place it at either:
 
-- `~/.pi/agent/extensions/anyrouter-cc/index.ts`
-- `.pi/extensions/anyrouter-cc/index.ts`
+- `~/.pi/agent/extensions/anyrouter/index.ts`
+- `.pi/extensions/anyrouter/index.ts`
 
 Then reload pi:
 
@@ -151,13 +151,13 @@ After installation/configuration:
 
 Choose a configured model, for example:
 
-- `anyrouter-cc / claude-opus-4-8`
-- `anyrouter-cc / gpt-5.6-sol`
+- `anyrouter / claude-opus-4-8`
+- `anyrouter / gpt-5.6-sol`
 
 Or run directly:
 
 ```bash
-pi --model anyrouter-cc/gpt-5.6-sol
+pi --model anyrouter/gpt-5.6-sol
 ```
 
 ## Debugging
@@ -165,7 +165,7 @@ pi --model anyrouter-cc/gpt-5.6-sol
 Enable request/response dumps:
 
 ```bash
-PI_ANYROUTER_CC_DEBUG=1 pi --model anyrouter-cc/gpt-5.6-sol -p "Reply with exactly OK"
+PI_ANYROUTER_CC_DEBUG=1 pi --model anyrouter/gpt-5.6-sol -p "Reply with exactly OK"
 ```
 
 Optional custom debug directory:
@@ -173,7 +173,7 @@ Optional custom debug directory:
 ```bash
 PI_ANYROUTER_CC_DEBUG=1 \
 PI_ANYROUTER_CC_DEBUG_DIR=/tmp/anyrouter-cc-debug \
-pi --model anyrouter-cc/gpt-5.6-sol -p "Reply with exactly OK"
+pi --model anyrouter/gpt-5.6-sol -p "Reply with exactly OK"
 ```
 
 Default debug output directory:
@@ -185,7 +185,7 @@ If AnyRouter intermittently returns `HTTP 520` / `Origin Error`, this package re
 The runtime uses SSE by default (`PI_ANYROUTER_CC_STREAM_MODE=force`). For troubleshooting, you can force old behavior with:
 
 ```bash
-PI_ANYROUTER_CC_STREAM_MODE=off pi --model anyrouter-cc/claude-opus-4-8 -p "Reply with exactly OK"
+PI_ANYROUTER_CC_STREAM_MODE=off pi --model anyrouter/claude-opus-4-8 -p "Reply with exactly OK"
 ```
 
 ## Share as a pi package

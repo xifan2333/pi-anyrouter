@@ -45,10 +45,10 @@ type ProviderConfigFile = {
 
 const DEFAULT_CONFIG_PATH = join(homedir(), ".pi", "agent", "anyrouter-cc.json");
 const CONFIG_PATH = process.env.PI_ANYROUTER_CC_CONFIG || DEFAULT_CONFIG_PATH;
-const PROVIDER_NAME = "anyrouter-cc";
+const PROVIDER_NAME = "anyrouter";
 // Keep this API id unique so pi uses this extension's streamSimple handler
 // without touching the built-in anthropic-messages implementation.
-const API_ID = "anyrouter-cc-messages" as Api;
+const API_ID = "anyrouter-messages" as Api;
 const DEBUG_ENABLED = process.env.PI_ANYROUTER_CC_DEBUG === "1";
 const DEBUG_DIR = process.env.PI_ANYROUTER_CC_DEBUG_DIR || join(process.cwd(), ".pi", "anyrouter-cc-debug");
 // Captured from the locally installed Claude Code on 2026-07-11.
@@ -100,7 +100,7 @@ function sanitizeText(text: string) {
 function resolveConfigValue(value?: string) {
   if (!value) return "";
   if (value.startsWith("!")) {
-    throw new Error("anyrouter-cc does not support shell-command apiKey values. Use a literal key, env var name, or PI_ANYROUTER_CC_API_KEY.");
+    throw new Error("anyrouter does not support shell-command apiKey values. Use a literal key, env var name, or PI_ANYROUTER_CC_API_KEY.");
   }
   return process.env[value] || value;
 }
@@ -1151,7 +1151,7 @@ function streamAnyRouterCc(model: Model<Api>, context: Context, options?: Simple
             // All retries exhausted. Push a text block with the error so pi
             // shows it, then end with done/stop to prevent pi from auto-retrying
             // the entire provider stream.
-            const errText = `[anyrouter-cc] ${streamError instanceof Error ? streamError.message : String(streamError)}`;
+            const errText = `[anyrouter] ${streamError instanceof Error ? streamError.message : String(streamError)}`;
             const contentIndex = output.content.length;
             output.content.push({ type: "text", text: errText } as any);
             output.stopReason = "stop";
@@ -1177,7 +1177,7 @@ function streamAnyRouterCc(model: Model<Api>, context: Context, options?: Simple
       stream.end();
     } catch (error) {
       output.stopReason = options?.signal?.aborted ? "aborted" : "error";
-      output.errorMessage = error instanceof Error ? `[anyrouter-cc] ${error.message}` : String(error);
+      output.errorMessage = error instanceof Error ? `[anyrouter] ${error.message}` : String(error);
       writeDebugFile("error", model.id, undefined, {
         stopReason: output.stopReason,
         errorMessage: output.errorMessage,
@@ -1198,7 +1198,7 @@ export default function (pi: ExtensionAPI) {
       api: API_ID,
       models: source.models.map((model) => ({
         id: model.id,
-        name: model.name ? `${model.name} (AnyRouter CC)` : `${model.id} (AnyRouter CC)`,
+        name: model.name ? `${model.name} (AnyRouter)` : `${model.id} (AnyRouter)`,
         api: API_ID,
         reasoning: model.reasoning ?? true,
         input: model.input ?? ["text"],
@@ -1214,8 +1214,8 @@ export default function (pi: ExtensionAPI) {
       streamSimple: streamAnyRouterCc,
     });
   } catch (error) {
-    console.error(`[anyrouter-cc] Failed to register provider: ${error instanceof Error ? error.message : String(error)}`);
-    console.error(`[anyrouter-cc] Config path: ${CONFIG_PATH}`);
-    console.error(`[anyrouter-cc] You can override with PI_ANYROUTER_CC_CONFIG, PI_ANYROUTER_CC_BASE_URL, PI_ANYROUTER_CC_API_KEY`);
+    console.error(`[anyrouter] Failed to register provider: ${error instanceof Error ? error.message : String(error)}`);
+    console.error(`[anyrouter] Config path: ${CONFIG_PATH}`);
+    console.error(`[anyrouter] You can override with PI_ANYROUTER_CC_CONFIG, PI_ANYROUTER_CC_BASE_URL, PI_ANYROUTER_CC_API_KEY`);
   }
 }
