@@ -97,7 +97,7 @@ Then reload pi:
 
 Create:
 
-- `~/.pi/agent/anyrouter-cc.json`
+- `~/.pi/agent/anyrouter.json`
 
 Example:
 
@@ -136,7 +136,7 @@ Notes:
 
 - `apiKey` can be a literal key or an environment variable name.
 - shell-command values like `"!command"` are intentionally not supported.
-- this package reads `~/.pi/agent/anyrouter-cc.json` by default rather than `models.json`.
+- this package reads `~/.pi/agent/anyrouter.json` by default rather than `models.json`.
 - `PI_ANYROUTER_CC_STREAM_MODE=auto` tries real SSE streaming first and falls back to the old non-stream JSON path if streaming fails before any content arrives.
 - `PI_ANYROUTER_CC_STREAM_MODE=force` uses SSE only; `PI_ANYROUTER_CC_STREAM_MODE=off` disables SSE.
 

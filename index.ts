@@ -43,7 +43,7 @@ type ProviderConfigFile = {
   models?: ProviderModelConfig[];
 };
 
-const DEFAULT_CONFIG_PATH = join(homedir(), ".pi", "agent", "anyrouter-cc.json");
+const DEFAULT_CONFIG_PATH = join(homedir(), ".pi", "agent", "anyrouter.json");
 const CONFIG_PATH = process.env.PI_ANYROUTER_CC_CONFIG || DEFAULT_CONFIG_PATH;
 const PROVIDER_NAME = "anyrouter";
 // Keep this API id unique so pi uses this extension's streamSimple handler
@@ -110,7 +110,7 @@ function loadSourceProvider() {
   try {
     content = readFileSync(CONFIG_PATH, "utf8");
   } catch {
-    throw new Error(`Config file not found: ${CONFIG_PATH}. Create it from anyrouter-cc.example.json or set PI_ANYROUTER_CC_CONFIG.`);
+    throw new Error(`Config file not found: ${CONFIG_PATH}. Create ~/.pi/agent/anyrouter.json or set PI_ANYROUTER_CC_CONFIG.`);
   }
 
   let parsed: ProviderConfigFile;
