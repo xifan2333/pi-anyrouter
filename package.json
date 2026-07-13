@@ -1,0 +1,53 @@
+{
+  "name": "pi-anyrouter",
+  "version": "0.3.0-local",
+  "private": false,
+  "type": "module",
+  "description": "Unofficial pi provider extension for AnyRouter Claude Code and Codex Responses Lite routes",
+  "keywords": [
+    "pi",
+    "pi-package",
+    "pi-extension",
+    "anyrouter",
+    "claude",
+    "claude-code",
+    "codex",
+    "openai"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/xifan2333/pi-anyrouter.git"
+  },
+  "homepage": "https://github.com/xifan2333/pi-anyrouter#readme",
+  "bugs": {
+    "url": "https://github.com/xifan2333/pi-anyrouter/issues"
+  },
+  "files": [
+    "index.ts",
+    "README.md"
+  ],
+  "pi": {
+    "extensions": [
+      "./index.ts"
+    ]
+  },
+  "scripts": {
+    "pack:dry-run": "npm pack --dry-run"
+  },
+  "dependencies": {
+    "undici": "^8.3.0"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "peerDependenciesMeta": {
+    "@earendil-works/pi-ai": {
+      "optional": true
+    },
+    "@earendil-works/pi-coding-agent": {
+      "optional": true
+    }
+  }
+}
