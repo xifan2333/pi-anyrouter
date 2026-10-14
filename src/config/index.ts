@@ -1,70 +1,70 @@
-import { readFileSync } from "node:fs";
-import { homedir } from "node:os";
-import { join } from "node:path";
-import type { AnyRouterConfig, ProviderConfigFile, StreamMode } from "../types/index.js";
+import type { ProviderModelConfig } from "../types/index.js";
+import { API_ID } from "../types/index.js";
 
-const DEFAULT_CONFIG_PATH = join(homedir(), ".pi", "agent", "anyrouter.json");
+export const DEFAULT_BASE_URL = "https://anyrouter.top";
 
-export function getConfigPath(): string {
-  return process.env.PI_ANYROUTER_CC_CONFIG || DEFAULT_CONFIG_PATH;
-}
-
-function resolveConfigValue(value?: string): string {
-  if (!value) return "";
-  if (value.startsWith("!")) {
-    throw new Error(
-      "anyrouter does not support shell-command apiKey values. Use a literal key, env var name, or PI_ANYROUTER_CC_API_KEY.",
-    );
-  }
-  return process.env[value] || value;
-}
-
-export function loadAnyRouterConfig(): AnyRouterConfig {
-  const configPath = getConfigPath();
-  let content = "";
-  try {
-    content = readFileSync(configPath, "utf8");
-  } catch {
-    throw new Error(
-      `Config file not found: ${configPath}. Create ~/.pi/agent/anyrouter.json or set PI_ANYROUTER_CC_CONFIG.`,
-    );
-  }
-
-  let parsed: ProviderConfigFile;
-  try {
-    parsed = JSON.parse(content) as ProviderConfigFile;
-  } catch (error) {
-    throw new Error(
-      `Invalid JSON in ${configPath}: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  }
-
-  const baseUrl = process.env.PI_ANYROUTER_CC_BASE_URL || parsed.baseUrl;
-  const apiKey = process.env.PI_ANYROUTER_CC_API_KEY || resolveConfigValue(parsed.apiKey);
-  const models = parsed.models || [];
-
-  if (!baseUrl) {
-    throw new Error(
-      `Missing baseUrl in ${configPath}. You can also set PI_ANYROUTER_CC_BASE_URL.`,
-    );
-  }
-  if (!apiKey) {
-    throw new Error(
-      `Missing apiKey in ${configPath}. You can also set PI_ANYROUTER_CC_API_KEY.`,
-    );
-  }
-  if (!models.length) {
-    throw new Error(`No models configured in ${configPath}. Add at least one model entry.`);
-  }
-
-  return { baseUrl, apiKey, models, configPath };
-}
-
-export function getStreamMode(): StreamMode {
-  const value = String(process.env.PI_ANYROUTER_CC_STREAM_MODE || "force")
-    .trim()
-    .toLowerCase();
-  if (["1", "true", "on", "auto"].includes(value)) return "auto";
-  if (["force", "only"].includes(value)) return "force";
-  return "off";
-}
+export const DEFAULT_MODELS: ProviderModelConfig[] = [
+  {
+    id: "gpt-6-astra",
+    name: "GPT 6 Astra",
+    api: API_ID,
+    reasoning: true,
+    input: ["text"],
+    contextWindow: 1000000,
+    maxTokens: 64000,
+  },
+  {
+    id: "gpt-6-astra-cc-format",
+    name: "GPT 6 Astra (CC Format)",
+    api: API_ID,
+    reasoning: true,
+    input: ["text"],
+    contextWindow: 1000000,
+    maxTokens: 64000,
+  },
+  {
+    id: "claude-opus-5-5",
+    name: "Claude Opus 5.5",
+    api: API_ID,
+    reasoning: true,
+    input: ["text"],
+    contextWindow: 1000000,
+    maxTokens: 64000,
+  },
+  {
+    id: "claude-opus-4-7",
+    name: "Claude Opus 4.7",
+    api: API_ID,
+    reasoning: true,
+    input: ["text"],
+    contextWindow: 500000,
+    maxTokens: 32000,
+  },
+  {
+    id: "claude-opus-4-6",
+    name: "Claude Opus 4.6",
+    api: API_ID,
+    reasoning: true,
+    input: ["text"],
+    contextWindow: 500000,
+    maxTokens: 32000,
+  },
+  {
+    id: "claude-sonnet-4-5-20250929",
+    name: "Claude Sonnet 4.5",
+    api: API_ID,
+    reasoning: true,
+    input: ["text"],
+    contextWindow: 500000,
+    maxTokens: 32000,
+  },
+  {
+    id: "claude-haiku-4-5-20251001",
+    name: "Claude Haiku 4.5",
+    api: API_ID,
+    reasoning: true,
+    input: ["text"],
+    contextWindow: 200000,
+    maxTokens: 32000,
+  },
+];

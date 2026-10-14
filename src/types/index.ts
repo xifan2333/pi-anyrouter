@@ -1,7 +1,6 @@
 import type { Api } from "@earendil-works/pi-ai";
 
 export type Json = Record<string, any>;
-export type StreamMode = "off" | "auto" | "force";
 
 export type ProviderModelConfig = {
   id: string;
@@ -17,19 +16,6 @@ export type ProviderModelConfig = {
   };
   contextWindow?: number;
   maxTokens?: number;
-};
-
-export type ProviderConfigFile = {
-  baseUrl?: string;
-  apiKey?: string;
-  models?: ProviderModelConfig[];
-};
-
-export type AnyRouterConfig = {
-  baseUrl: string;
-  apiKey: string;
-  models: ProviderModelConfig[];
-  configPath: string;
 };
 
 export type DiagnosticsSnapshot = {

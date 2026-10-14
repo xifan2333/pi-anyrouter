@@ -13,6 +13,20 @@ const NAME_MAP: Record<string, string> = {
   google_search: "Google_Search",
 };
 
+const REVERSE_NAME_MAP: Record<string, string> = {
+  read: "read",
+  write: "write",
+  edit: "edit",
+  bash: "bash",
+  grep: "grep",
+  glob: "find",
+  ls: "ls",
+  todowrite: "todowrite",
+  webfetch: "webfetch",
+  websearch: "websearch",
+  google_search: "google_search",
+};
+
 /**
  * Formats a Pi tool name to Claude Code format (PascalCase or mapped alias).
  */
@@ -28,9 +42,7 @@ export function toClaudeCodeName(name?: string | null): string {
  */
 export function fromClaudeCodeName(name?: string | null): string {
   if (!name || typeof name !== "string") return name ?? "";
-  const lower = name.toLowerCase();
-  for (const [from, to] of Object.entries(NAME_MAP)) {
-    if (to.toLowerCase() === lower) return from;
-  }
+  const mapped = REVERSE_NAME_MAP[name.toLowerCase()];
+  if (mapped) return mapped;
   return name.charAt(0).toLowerCase() + name.slice(1);
 }

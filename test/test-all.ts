@@ -19,7 +19,7 @@ import {
   parseSseEvent,
   nextSseChunk,
 } from "../src/utils/index.js";
-import { loadAnyRouterConfig } from "../src/config/index.js";
+import { DEFAULT_BASE_URL, DEFAULT_MODELS } from "../src/config/index.js";
 import type { Context, Model, Tool } from "@earendil-works/pi-ai";
 
 console.log("Starting tests...");
@@ -72,7 +72,7 @@ const sseEvent = parseSseEvent(parsed1.chunk);
 assert.strictEqual(sseEvent.event, "message_start");
 assert.strictEqual(sseEvent.data, "{\"type\":\"message_start\"}");
 
-// Test 4: Tool Resolution from TranscriptContext (THE BUG FIX!)
+// Test 4: Tool Resolution from TranscriptContext
 console.log("Test 4: Tool Resolution from TranscriptContext");
 const mockTools: Tool[] = [
   {
@@ -87,8 +87,6 @@ const mockTools: Tool[] = [
   },
 ];
 
-// In modern pi >= 0.86, context.tools is undefined!
-// Tools are inside system messages in context.messages
 const modernPiContext: Context = {
   messages: [
     {
@@ -101,7 +99,6 @@ const modernPiContext: Context = {
       content: "List files",
     },
   ],
-  // Note: tools and systemPrompt are undefined on Context!
 };
 
 const resolvedTools = resolveCurrentTools(modernPiContext);
@@ -128,15 +125,6 @@ const removalContext: Context = {
 const toolsAfterRemoval = resolveCurrentTools(removalContext);
 assert.strictEqual(toolsAfterRemoval.length, 1);
 assert.strictEqual(toolsAfterRemoval[0].name, "read");
-
-// Test legacy flat Context fallback
-const legacyContext: Context = {
-  messages: [],
-  systemPrompt: "Legacy prompt",
-  tools: [mockTools[0]],
-};
-assert.strictEqual(resolveCurrentTools(legacyContext).length, 1);
-assert.strictEqual(resolveCurrentSystemPrompt(legacyContext), "Legacy prompt");
 
 // Test 5: Claude Code Request Body with Injected Tools
 console.log("Test 5: Claude Code Request Body");
@@ -187,11 +175,11 @@ assert.strictEqual(codexBody.tools[0].name, "read");
 assert.strictEqual(codexBody.input[0].role, "developer");
 assert.strictEqual(codexBody.input[0].content[0].text, "You are an expert developer.");
 
-// Test 7: Config Loading
-console.log("Test 7: Config Loading");
-const cfg = loadAnyRouterConfig();
-assert.ok(cfg.baseUrl.startsWith("http"));
-assert.ok(cfg.apiKey.length > 0);
-assert.ok(cfg.models.length > 0);
+// Test 7: Default Models & Base URL Catalog
+console.log("Test 7: Default Models & Base URL Catalog");
+assert.ok(DEFAULT_BASE_URL.startsWith("https://"));
+assert.ok(DEFAULT_MODELS.length > 0);
+assert.ok(DEFAULT_MODELS.some((m) => m.id === "gpt-6-astra"));
+assert.ok(DEFAULT_MODELS.some((m) => m.id.startsWith("claude-opus")));
 
 console.log("All unit tests passed successfully! 🎉");

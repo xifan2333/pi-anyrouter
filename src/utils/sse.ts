@@ -8,8 +8,13 @@ export function parseSseEvent(chunk: string): SseEvent {
   const data: string[] = [];
   for (const line of chunk.split(/\r?\n/)) {
     if (!line || line.startsWith(":")) continue;
-    if (line.startsWith("event:")) event = line.slice(6).trim();
-    else if (line.startsWith("data:")) data.push(line.slice(5).trimStart());
+    if (line.startsWith("event:")) {
+      event = line.slice(6).trim();
+      continue;
+    }
+    if (line.startsWith("data:")) {
+      data.push(line.slice(5).trimStart());
+    }
   }
   return { event, data: data.join("\n") };
 }

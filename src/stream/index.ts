@@ -8,17 +8,13 @@ import {
   type Model,
   type SimpleStreamOptions,
 } from "@earendil-works/pi-ai";
-import { loadAnyRouterConfig, getStreamMode } from "../config/index.js";
 import {
   recordDiagnosticsError,
   runWithDiagnostics,
   setDiagnosticsField,
 } from "../diagnostics/index.js";
-import { writeDebugFile } from "../client/index.js";
 import {
-  applyJsonResponseToOutput,
   buildClaudeCodeRequestBody,
-  postJson,
   tryStreamAnyRouterCc,
 } from "./claude.js";
 import {
@@ -38,14 +34,6 @@ export function createEmptyUsage() {
     totalTokens: 0,
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
   };
-}
-
-export function resetOutputState(output: AssistantMessage) {
-  output.content = [];
-  output.usage = createEmptyUsage();
-  output.stopReason = "stop";
-  output.errorMessage = undefined;
-  output.responseId = undefined;
 }
 
 export function streamAnyRouter(
@@ -72,17 +60,24 @@ export function streamAnyRouter(
       setDiagnosticsField("modelId", model.id);
 
       try {
-        const config = loadAnyRouterConfig();
-        const sessionId = randomUUID();
-        const configuredModel = config.models.find((item) => item.id === model.id);
+        const apiKey = options?.apiKey;
+        if (!apiKey) {
+          throw new Error("No API key provided for AnyRouter. Please configure your API key in Pi auth or settings.");
+        }
 
-        if (isCodexModel(model.id, configuredModel?.api)) {
+        const baseUrl = model.baseUrl ? model.baseUrl.replace(/\/+$/, "") : "";
+        if (!baseUrl) {
+          throw new Error("No baseUrl provided for AnyRouter model.");
+        }
+
+        const sessionId = randomUUID();
+
+        if (isCodexModel(model.id, model.api)) {
           setDiagnosticsField("protocol", "codex-responses");
           const turnId = randomUUID();
           const metadata = createCodexMetadata(sessionId, turnId);
           const { body } = buildCodexRequestBody(model, context, options, sessionId, metadata);
 
-          // Support options.onPayload hook
           let finalBody = body;
           if (options?.onPayload) {
             try {
@@ -97,9 +92,9 @@ export function streamAnyRouter(
 
           stream.push({ type: "start", partial: output });
           await tryStreamAnyRouterCodex(
-            getCodexResponsesUrl(config.baseUrl),
+            getCodexResponsesUrl(baseUrl),
             finalBody,
-            config.apiKey,
+            apiKey,
             model,
             output,
             stream,
@@ -121,7 +116,7 @@ export function streamAnyRouter(
 
         // Claude Code protocol
         setDiagnosticsField("protocol", "claude-code");
-        const url = `${config.baseUrl.replace(/\/$/, "")}/v1/messages?beta=true`;
+        const url = `${baseUrl}/v1/messages?beta=true`;
         const { requestBody } = buildClaudeCodeRequestBody(model, context, options, sessionId);
 
         let finalRequestBody = requestBody;
@@ -137,63 +132,18 @@ export function streamAnyRouter(
         }
 
         stream.push({ type: "start", partial: output });
-
-        const streamMode = getStreamMode();
-        if (streamMode !== "off") {
-          try {
-            await tryStreamAnyRouterCc(
-              url,
-              finalRequestBody,
-              config.apiKey,
-              model,
-              output,
-              stream,
-              sessionId,
-              options,
-            );
-            if (options?.signal?.aborted) throw new Error("Request was aborted");
-            setDiagnosticsField("latencyMs", Date.now() - startTime);
-            stream.push({
-              type: "done",
-              reason: output.stopReason as "stop" | "length" | "toolUse",
-              message: output,
-            });
-            stream.end();
-            return;
-          } catch (streamError) {
-            if (streamMode === "force" || output.content.length > 0) {
-              const errText = `[anyrouter] ${streamError instanceof Error ? streamError.message : String(streamError)}`;
-              const contentIndex = output.content.length;
-              output.content.push({ type: "text", text: errText } as any);
-              output.stopReason = "stop";
-              output.errorMessage = errText;
-              stream.push({ type: "text_start", contentIndex, partial: output });
-              stream.push({ type: "text_delta", contentIndex, delta: errText, partial: output });
-              stream.push({ type: "text_end", contentIndex, content: errText, partial: output });
-              setDiagnosticsField("latencyMs", Date.now() - startTime);
-              recordDiagnosticsError(streamError);
-              stream.push({ type: "done", reason: "stop", message: output });
-              stream.end();
-              return;
-            }
-            writeDebugFile("error", model.id, undefined, {
-              phase: "stream-fallback",
-              errorMessage: streamError instanceof Error ? streamError.message : String(streamError),
-            });
-            resetOutputState(output);
-          }
-        }
-
-        // Non-streaming fallback
-        const response = await postJson(
+        await tryStreamAnyRouterCc(
           url,
           finalRequestBody,
-          config.apiKey,
-          model.id,
+          apiKey,
+          model,
+          output,
+          stream,
           sessionId,
           options,
         );
-        applyJsonResponseToOutput(response, output, stream, model);
+
+        if (options?.signal?.aborted) throw new Error("Request was aborted");
         setDiagnosticsField("latencyMs", Date.now() - startTime);
         stream.push({
           type: "done",
@@ -206,10 +156,6 @@ export function streamAnyRouter(
         output.errorMessage = error instanceof Error ? `[anyrouter] ${error.message}` : String(error);
         setDiagnosticsField("latencyMs", Date.now() - startTime);
         recordDiagnosticsError(error);
-        writeDebugFile("error", model.id, undefined, {
-          stopReason: output.stopReason,
-          errorMessage: output.errorMessage,
-        });
         stream.push({ type: "error", reason: output.stopReason, error: output });
         stream.end();
       }

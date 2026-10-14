@@ -1,7 +1,7 @@
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import * as piAiCompat from "@earendil-works/pi-ai/compat";
-import { API_ID, PROVIDER_ID, PROVIDER_NAME, type AnyRouterConfig } from "./types/index.js";
-import { getConfigPath, loadAnyRouterConfig } from "./config/index.js";
+import { API_ID, PROVIDER_ID, PROVIDER_NAME, type ProviderModelConfig } from "./types/index.js";
+import { DEFAULT_BASE_URL, DEFAULT_MODELS } from "./config/index.js";
 import { streamAnyRouter } from "./stream/index.js";
 import { getLastDiagnostics } from "./diagnostics/index.js";
 import { getProxyUrl } from "./client/proxy.js";
@@ -34,12 +34,15 @@ function emitCommandOutput(
     ctx.ui.notify(text, type);
     return;
   }
-  if (type === "warning" || type === "error") console.error(text);
-  else console.log(text);
+  if (type === "warning" || type === "error") {
+    console.error(text);
+    return;
+  }
+  console.log(text);
 }
 
-function mapModels(config: AnyRouterConfig) {
-  return config.models.map((model) => ({
+function mapModels(models: ProviderModelConfig[]) {
+  return models.map((model) => ({
     id: model.id,
     name: model.name ? `${model.name} (AnyRouter)` : `${model.id} (AnyRouter)`,
     api: API_ID,
@@ -59,52 +62,23 @@ function mapModels(config: AnyRouterConfig) {
 export default function (pi: ExtensionAPI): void {
   registerCompatApiProvider();
 
-  let activeConfig: AnyRouterConfig | undefined;
-  try {
-    activeConfig = loadAnyRouterConfig();
-  } catch (error) {
-    console.error(
-      `[anyrouter] Failed to load config: ${error instanceof Error ? error.message : String(error)}`,
-    );
-    console.error(`[anyrouter] Config path: ${getConfigPath()}`);
-  }
-
-  if (activeConfig) {
-    pi.registerProvider(PROVIDER_ID, {
-      baseUrl: activeConfig.baseUrl,
-      apiKey: activeConfig.apiKey,
-      api: API_ID,
-      models: mapModels(activeConfig),
-      refreshModels: async () => {
-        try {
-          const reloaded = loadAnyRouterConfig();
-          activeConfig = reloaded;
-          return mapModels(reloaded);
-        } catch {
-          return activeConfig ? mapModels(activeConfig) : [];
-        }
-      },
-      streamSimple: streamAnyRouter,
-    });
-  }
+  pi.registerProvider(PROVIDER_ID, {
+    name: PROVIDER_NAME,
+    baseUrl: DEFAULT_BASE_URL,
+    apiKey: "$ANYROUTER_API_KEY",
+    api: API_ID,
+    models: mapModels(DEFAULT_MODELS),
+    streamSimple: streamAnyRouter,
+  });
 
   // Diagnostics command
   pi.registerCommand("anyrouter.doctor", {
     description: "Show AnyRouter provider diagnostics and tool injection status",
     handler: async (_args, ctx) => {
       const d = getLastDiagnostics();
-      const configPath = getConfigPath();
-      let cfg: AnyRouterConfig | undefined = activeConfig;
-      try {
-        cfg = loadAnyRouterConfig();
-      } catch {
-        // use last active
-      }
-
-      const maskedKey = cfg?.apiKey
-        ? `${cfg.apiKey.slice(0, 6)}...${cfg.apiKey.slice(-4)}`
-        : "not-configured";
-      const proxy = cfg ? getProxyUrl(cfg.baseUrl) || "none (direct)" : "unknown";
+      const currentModel = ctx.model;
+      const baseUrl = currentModel?.baseUrl || d.endpoint || DEFAULT_BASE_URL;
+      const proxy = getProxyUrl(baseUrl) || "none (direct)";
 
       const toolsInfo =
         d.toolsInjected && d.toolsInjected.length > 0
@@ -113,10 +87,7 @@ export default function (pi: ExtensionAPI): void {
 
       const lines = [
         `provider=${PROVIDER_NAME}`,
-        `configPath=${configPath}`,
-        `baseUrl=${cfg?.baseUrl || "none"}`,
-        `apiKey=${maskedKey}`,
-        `modelsCount=${cfg?.models.length ?? 0}`,
+        `baseUrl=${baseUrl}`,
         `proxy=${proxy}`,
         `lastProtocol=${d.protocol || "none"}`,
         `lastModel=${d.modelId || "none"}`,
@@ -137,22 +108,16 @@ export default function (pi: ExtensionAPI): void {
 
   // Refresh command
   pi.registerCommand("anyrouter.refresh", {
-    description: "Reload AnyRouter configuration and model catalog",
+    description: "Reload AnyRouter models from registry",
     handler: async (_args, ctx) => {
       try {
-        const reloaded = loadAnyRouterConfig();
-        activeConfig = reloaded;
         if (typeof ctx.modelRegistry?.refresh === "function") {
           await ctx.modelRegistry.refresh({
             force: true,
             providers: [PROVIDER_ID],
           });
         }
-        emitCommandOutput(
-          ctx,
-          `AnyRouter refreshed: loaded ${reloaded.models.length} models from ${reloaded.configPath}`,
-          "info",
-        );
+        emitCommandOutput(ctx, "AnyRouter models refreshed successfully.", "info");
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
         emitCommandOutput(ctx, `AnyRouter refresh failed: ${msg}`, "error");
@@ -162,23 +127,17 @@ export default function (pi: ExtensionAPI): void {
 
   // Models listing command
   pi.registerCommand("anyrouter.models", {
-    description: "List currently configured AnyRouter models",
+    description: "List currently available AnyRouter models",
     handler: async (_args, ctx) => {
-      let cfg = activeConfig;
-      try {
-        cfg = loadAnyRouterConfig();
-      } catch {
-        // use activeConfig
-      }
-      if (!cfg || !cfg.models.length) {
-        emitCommandOutput(ctx, "No models configured in AnyRouter.", "warning");
-        return;
-      }
-      const lines = cfg.models.map(
-        (m, i) =>
+      const models = ctx.modelRegistry?.getModels
+        ? ctx.modelRegistry.getModels(PROVIDER_ID)
+        : DEFAULT_MODELS;
+      const list = models && models.length > 0 ? models : DEFAULT_MODELS;
+      const lines = list.map(
+        (m: any, i: number) =>
           `${i + 1}. ${m.id} (${m.name || m.id}) - reasoning: ${m.reasoning ?? true}, maxTokens: ${m.maxTokens ?? 32000}`,
       );
-      emitCommandOutput(ctx, `AnyRouter Models (${cfg.models.length}):\n${lines.join("\n")}`);
+      emitCommandOutput(ctx, `AnyRouter Models (${list.length}):\n${lines.join("\n")}`);
     },
   });
 }

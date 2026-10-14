@@ -98,71 +98,97 @@ Then reload pi:
 /reload
 ```
 
-## Config
+## Authentication & Configuration
 
-Create:
+`pi-anyrouter` follows the official Pi provider specification with **zero custom configuration files**:
 
-- `~/.pi/agent/anyrouter.json`
+### 1. Set your API Key
 
-Example:
+Choose any official Pi authentication method:
+
+- **Via `/login` command in Pi**:
+  ```text
+  /login anyrouter
+  ```
+- **Via `~/.pi/agent/auth.json`**:
+  ```json
+  {
+    "anyrouter": {
+      "type": "api_key",
+      "key": "sk-your-anyrouter-key"
+    }
+  }
+  ```
+- **Via `~/.pi/agent/models.json`**:
+  ```json
+  {
+    "providers": {
+      "anyrouter": {
+        "apiKey": "sk-your-anyrouter-key"
+      }
+    }
+  }
+  ```
+
+### 2. Built-in Models
+
+The provider registers standard AnyRouter models out of the box:
+
+- `gpt-6-astra` (Codex Responses Lite)
+- `gpt-6-astra-cc-format` (Claude Code format)
+- `claude-opus-5-5`
+- `claude-opus-4-7`
+- `claude-opus-4-6`
+- `claude-sonnet-4-5-20250929`
+- `claude-haiku-4-5-20251001`
+
+### 3. Custom Models & Overrides (Optional)
+
+To add new models or override existing parameters, use Pi's standard `~/.pi/agent/models.json`:
 
 ```json
 {
-  "baseUrl": "https://anyrouter.top",
-  "apiKey": "YOUR_ANYROUTER_KEY_OR_ENV_NAME",
-  "models": [
-    {
-      "id": "claude-opus-4-8",
-      "name": "Claude Opus 4.8",
-      "reasoning": true,
-      "input": ["text"],
-      "cost": {
-        "input": 0,
-        "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
-      "contextWindow": 200000,
-      "maxTokens": 32000
+  "providers": {
+    "anyrouter": {
+      "baseUrl": "https://anyrouter.top",
+      "models": [
+        {
+          "id": "my-custom-model",
+          "name": "My Custom Model",
+          "reasoning": true,
+          "input": ["text"],
+          "contextWindow": 500000,
+          "maxTokens": 32000
+        }
+      ],
+      "modelOverrides": {
+        "gpt-6-astra": {
+          "contextWindow": 1048576
+        }
+      }
     }
-  ]
+  }
 }
 ```
 
-You can also override config values with environment variables:
-
-- `PI_ANYROUTER_CC_CONFIG`
-- `PI_ANYROUTER_CC_BASE_URL`
-- `PI_ANYROUTER_CC_API_KEY`
-- `PI_ANYROUTER_CC_MAX_RETRIES` (default: `10`)
-- `PI_ANYROUTER_CC_STREAM_MODE` (default: `force`)
-
-Notes:
-
-- `apiKey` can be a literal key or an environment variable name.
-- shell-command values like `"!command"` are intentionally not supported.
-- this package reads `~/.pi/agent/anyrouter.json` by default rather than `models.json`.
-- `PI_ANYROUTER_CC_STREAM_MODE=auto` tries real SSE streaming first and falls back to the old non-stream JSON path if streaming fails before any content arrives.
-- `PI_ANYROUTER_CC_STREAM_MODE=force` uses SSE only; `PI_ANYROUTER_CC_STREAM_MODE=off` disables SSE.
-
 ## Use
 
-After installation/configuration:
+After installation:
 
 ```text
 /reload
 /model
 ```
 
-Choose a configured model, for example:
+Choose an AnyRouter model, for example:
 
-- `anyrouter / claude-opus-4-8`
-- `anyrouter / gpt-5.6-sol`
+- `anyrouter / claude-opus-4-6`
+- `anyrouter / gpt-6-astra`
 
 Or run directly:
 
 ```bash
-pi --model anyrouter/gpt-5.6-sol
+pi --model anyrouter/gpt-6-astra
 ```
 
 ## Commands
@@ -170,36 +196,8 @@ pi --model anyrouter/gpt-5.6-sol
 In an interactive Pi session, you can run:
 
 - `/anyrouter.doctor` - Displays detailed diagnostics (endpoint, HTTP status, request ID, latency, injected tools count and names, error details).
-- `/anyrouter.refresh` - Hot-reloads `~/.pi/agent/anyrouter.json` and updates the provider models.
-- `/anyrouter.models` - Lists all configured AnyRouter models with their capabilities.
-
-## Debugging
-
-Enable request/response dumps:
-
-```bash
-PI_ANYROUTER_CC_DEBUG=1 pi --model anyrouter/gpt-5.6-sol -p "Reply with exactly OK"
-```
-
-Optional custom debug directory:
-
-```bash
-PI_ANYROUTER_CC_DEBUG=1 \
-PI_ANYROUTER_CC_DEBUG_DIR=/tmp/anyrouter-cc-debug \
-pi --model anyrouter/gpt-5.6-sol -p "Reply with exactly OK"
-```
-
-Default debug output directory:
-
-- `.pi/anyrouter-cc-debug/`
-
-If AnyRouter intermittently returns `HTTP 520` / `Origin Error`, this package retries transient upstream failures automatically with exponential backoff. You can tune the retry count with `PI_ANYROUTER_CC_MAX_RETRIES`.
-
-The runtime uses SSE by default (`PI_ANYROUTER_CC_STREAM_MODE=force`). For troubleshooting, you can force old behavior with:
-
-```bash
-PI_ANYROUTER_CC_STREAM_MODE=off pi --model anyrouter/claude-opus-4-8 -p "Reply with exactly OK"
-```
+- `/anyrouter.refresh` - Reloads AnyRouter models from the Pi model registry.
+- `/anyrouter.models` - Lists all available AnyRouter models with their capabilities.
 
 ## Share as a pi package
 

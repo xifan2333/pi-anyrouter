@@ -27,6 +27,8 @@ export function getRetryDelayMs(attempt: number, retryAfterMs?: number): number 
   return base + jitter;
 }
 
+export const DEFAULT_MAX_RETRIES = 3;
+
 export function getMaxRetries(): number {
-  return Math.max(0, Number(process.env.PI_ANYROUTER_CC_MAX_RETRIES || "10") || 0);
+  return DEFAULT_MAX_RETRIES;
 }
