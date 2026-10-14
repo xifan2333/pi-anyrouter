@@ -1,0 +1,29 @@
+amends "package://github.com/jdx/hk/releases/download/v2.6.0/hk@2.6.0#/Config.pkl"
+import "package://github.com/jdx/hk/releases/download/v2.6.0/hk@2.6.0#/Builtins.pkl"
+
+local linters = new Mapping {
+    ["oxlint"] = Builtins.ox_lint
+    ["test"] = new Step {
+        check = "npm test"
+    }
+}
+
+hooks {
+    ["pre-commit"] {
+        fix = true
+        stash = "git"
+        steps = linters
+    }
+    ["pre-push"] {
+        steps = linters
+    }
+    ["check"] {
+        steps = linters
+    }
+    ["fix"] {
+        fix = true
+        steps = linters
+    }
+}
+
+steps = linters

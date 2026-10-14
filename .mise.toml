@@ -1,0 +1,20 @@
+[tools]
+node = "26"
+hk = "2.6.0"
+oxlint = "latest"
+
+[tasks.test]
+description = "Run unit tests"
+run = "npm test"
+
+[tasks.lint]
+description = "Run oxlint"
+run = "oxlint --deny-warnings"
+
+[tasks.check]
+description = "Run all checks via hk"
+run = "hk check --all"
+
+[tasks.fix]
+description = "Auto-fix lint issues via hk"
+run = "hk fix"

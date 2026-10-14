@@ -38,7 +38,12 @@ This package selects an adapter by model family:
 - Supports Claude Code and Codex Responses Lite request validation
 - No local relay/proxy required
 - Converts tool names to Claude Code naming
-- Supports reasoning via `thinking` + `output_config`
+- Automatically resolves tools and system prompt from Pi's `TranscriptContext`
+- Modular architecture with clean separation of client, stream, types, and diagnostics
+- Dynamic catalog refreshing with `refreshModels`
+- Built-in diagnostics command: `/anyrouter.doctor`
+- Built-in reload command: `/anyrouter.refresh`
+- Built-in models list command: `/anyrouter.models`
 - Built-in request/response debug dump
 - Retries transient upstream failures like HTTP 520/502/503/504 automatically
 - Packaged so it can be shared as a pi package
@@ -160,6 +165,14 @@ Or run directly:
 pi --model anyrouter/gpt-5.6-sol
 ```
 
+## Commands
+
+In an interactive Pi session, you can run:
+
+- `/anyrouter.doctor` - Displays detailed diagnostics (endpoint, HTTP status, request ID, latency, injected tools count and names, error details).
+- `/anyrouter.refresh` - Hot-reloads `~/.pi/agent/anyrouter.json` and updates the provider models.
+- `/anyrouter.models` - Lists all configured AnyRouter models with their capabilities.
+
 ## Debugging
 
 Enable request/response dumps:
@@ -196,7 +209,7 @@ This repo is already structured as a pi package through `package.json`:
 {
   "keywords": ["pi-package"],
   "pi": {
-    "extensions": ["./index.ts"]
+    "extensions": ["./src/index.ts"]
   }
 }
 ```

@@ -1,8 +1,9 @@
 {
   "name": "pi-anyrouter",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "private": false,
   "type": "module",
+  "main": "./src/index.ts",
   "description": "Unofficial pi provider extension for AnyRouter Claude Code and Codex Responses Lite routes",
   "keywords": [
     "pi",
@@ -24,15 +25,19 @@
     "url": "https://github.com/xifan2333/pi-anyrouter/issues"
   },
   "files": [
+    "LICENSE",
+    "README.md",
+    "src",
     "index.ts",
-    "README.md"
+    "tsconfig.json"
   ],
   "pi": {
     "extensions": [
-      "./index.ts"
+      "./src/index.ts"
     ]
   },
   "scripts": {
+    "test": "node --loader ./scripts/loader.mjs --experimental-strip-types test/test-all.ts",
     "pack:dry-run": "npm pack --dry-run"
   },
   "dependencies": {
