@@ -14,22 +14,11 @@ import {
 } from "@earendil-works/pi-ai";
 import { CODEX_VERSION, type Json } from "../types/index.js";
 import {
-  extractRequestId,
-  nextSseChunk,
-  parseSseEvent,
-  redactHeaders,
+  iterateSseEvents,
   sanitizeText,
   tryParseJson,
 } from "../utils/index.js";
-import {
-  delay,
-  fetchWithProxy,
-  getMaxRetries,
-  getRetryDelayMs,
-  isRetryableStatus,
-  parseRetryAfterMs,
-  writeDebugFile,
-} from "../client/index.js";
+import { postSseWithRetry } from "../client/index.js";
 import { setDiagnosticsField } from "../diagnostics/index.js";
 import { mapReasoningEffort } from "./claude.js";
 import { resolveCurrentSystemPrompt, resolveCurrentTools } from "./context.js";
@@ -451,124 +440,29 @@ export async function tryStreamAnyRouterCodex(
   metadata: ReturnType<typeof createCodexMetadata>,
   options?: SimpleStreamOptions,
 ): Promise<void> {
-  const bodyText = JSON.stringify(body);
-  const maxRetries = getMaxRetries();
-  let response: Response | undefined;
+  const headers = createCodexHeaders(apiKey, sessionId, metadata);
+  const response = await postSseWithRetry({
+    url,
+    headers,
+    body: JSON.stringify(body),
+    signal: options?.signal,
+    onResponse: options?.onResponse,
+  });
 
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    const headers = createCodexHeaders(apiKey, sessionId, metadata);
-    if (attempt === 0) {
-      writeDebugFile("request", model.id, undefined, {
-        url,
-        headers: redactHeaders(headers),
-        body,
-        transport: "codex-sse",
-      });
-    }
-    try {
-      response = await fetchWithProxy(url, {
-        method: "POST",
-        signal: options?.signal,
-        headers,
-        body: bodyText,
-      });
-    } catch (error) {
-      if (attempt < maxRetries && !options?.signal?.aborted) {
-        await delay(getRetryDelayMs(attempt));
-        continue;
-      }
-      throw error;
-    }
-
-    setDiagnosticsField("status", response.status);
-    setDiagnosticsField("endpoint", url);
-    setDiagnosticsField("retryAttempt", attempt);
-
-    if (response.ok && (response.headers.get("content-type") || "").includes("text/event-stream")) {
-      break;
-    }
-    const raw = await response.text();
-    const parsed = tryParseJson(raw) || { raw };
-    const requestId = extractRequestId(parsed, response.headers);
-    setDiagnosticsField("requestId", requestId);
-
-    writeDebugFile("error", model.id, requestId, {
-      status: response.status,
-      requestId,
-      body: parsed,
-      raw,
-      transport: "codex-sse",
-      retryAttempt: attempt,
-    });
-    if (!response.ok && attempt < maxRetries && isRetryableStatus(response.status)) {
-      await delay(
-        getRetryDelayMs(attempt, parseRetryAfterMs(response.headers.get("retry-after"))),
-      );
-      response = undefined;
-      continue;
-    }
-    throw new Error(raw || `HTTP ${response.status}`);
-  }
-
-  if (!response?.body) throw new Error("Codex stream response body missing");
-
-  if (options?.onResponse) {
-    try {
-      options.onResponse(response);
-    } catch {
-      // Best-effort hook
-    }
-  }
+  if (!response.body) throw new Error("Codex stream response body missing");
 
   const slots = new Map<number, any>();
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
   let terminal = false;
 
-  while (true) {
-    const { value, done } = await reader.read();
-    buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
-    let parsedChunk = nextSseChunk(buffer);
-    while (parsedChunk) {
-      buffer = parsedChunk.rest;
-      const event = parseSseEvent(parsedChunk.chunk);
-      if (event.data && event.data !== "[DONE]") {
-        const payload = tryParseJson(event.data);
-        if (!payload) throw new Error(`invalid Codex SSE payload: ${event.data.slice(0, 200)}`);
-        applyCodexSsePayload(payload, output, stream, model, slots);
-        if (payload.type === "response.completed" || payload.type === "response.incomplete") {
-          terminal = true;
-        }
-      }
-      parsedChunk = nextSseChunk(buffer);
-    }
-    if (done) break;
-  }
-
-  const tail = buffer.trim();
-  if (tail) {
-    const event = parseSseEvent(tail);
-    if (event.data && event.data !== "[DONE]") {
-      const payload = tryParseJson(event.data);
-      if (!payload) throw new Error(`invalid Codex SSE payload: ${event.data.slice(0, 200)}`);
-      applyCodexSsePayload(payload, output, stream, model, slots);
-      if (payload.type === "response.completed" || payload.type === "response.incomplete") {
-        terminal = true;
-      }
+  for await (const event of iterateSseEvents(response.body)) {
+    if (event.data === "[DONE]") continue;
+    const payload = tryParseJson(event.data);
+    if (!payload) throw new Error(`invalid Codex SSE payload: ${event.data.slice(0, 200)}`);
+    applyCodexSsePayload(payload, output, stream, model, slots);
+    if (payload.type === "response.completed" || payload.type === "response.incomplete") {
+      terminal = true;
     }
   }
 
   if (!terminal) throw new Error("Codex stream ended before a terminal response event");
-
-  const reqId = response.headers.get("x-oneapi-request-id") || undefined;
-  setDiagnosticsField("requestId", reqId);
-
-  writeDebugFile("response", model.id, reqId, {
-    status: response.status,
-    responseId: output.responseId,
-    stopReason: output.stopReason,
-    usage: output.usage,
-    transport: "codex-sse",
-  });
 }

@@ -27,24 +27,13 @@ import {
   type Json,
 } from "../types/index.js";
 import {
-  extractRequestId,
   fromClaudeCodeName,
-  nextSseChunk,
-  parseSseEvent,
-  redactHeaders,
+  iterateSseEvents,
   sanitizeText,
   toClaudeCodeName,
   tryParseJson,
 } from "../utils/index.js";
-import {
-  delay,
-  fetchWithProxy,
-  getMaxRetries,
-  getRetryDelayMs,
-  isRetryableStatus,
-  parseRetryAfterMs,
-  writeDebugFile,
-} from "../client/index.js";
+import { postSseWithRetry } from "../client/index.js";
 import { setDiagnosticsField } from "../diagnostics/index.js";
 import { resolveCurrentSystemPrompt, resolveCurrentTools } from "./context.js";
 
@@ -441,142 +430,35 @@ export async function tryStreamAnyRouterCc(
   sessionId: string,
   options?: SimpleStreamOptions,
 ): Promise<void> {
-  const requestBody = { ...body, stream: true };
-  const bodyText = JSON.stringify(requestBody);
-  const maxRetries = getMaxRetries();
-  let response: Response | undefined;
-
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    const headers = getClaudeCodeHeaders(apiKey, 0, sessionId);
-    if (attempt === 0) {
-      writeDebugFile("request", model.id, undefined, {
-        url,
-        headers: redactHeaders(headers),
-        body: requestBody,
-        transport: "sse",
-      });
-    }
-
-    try {
-      response = await fetchWithProxy(url, {
-        method: "POST",
-        signal: options?.signal,
-        headers,
-        body: bodyText,
-      });
-    } catch (error) {
-      if (attempt < maxRetries && !options?.signal?.aborted) {
-        await delay(getRetryDelayMs(attempt));
-        continue;
-      }
-      throw error;
-    }
-
-    setDiagnosticsField("status", response.status);
-    setDiagnosticsField("endpoint", url);
-    setDiagnosticsField("retryAttempt", attempt);
-
-    const contentType = response.headers.get("content-type") || "";
-    if (response.ok && contentType.includes("text/event-stream")) break;
-
-    const raw = await response.text();
-    const parsed = tryParseJson(raw) || { raw };
-    const requestId = extractRequestId(parsed, response.headers);
-    setDiagnosticsField("requestId", requestId);
-
-    writeDebugFile(response.ok ? "response" : "error", model.id, requestId, {
-      status: response.status,
-      statusText: response.statusText,
-      requestId,
-      headers: Object.fromEntries(response.headers.entries()),
-      body: parsed,
-      raw,
-      transport: "sse",
-      retryAttempt: attempt,
-      maxRetries,
-    });
-
-    if (!response.ok && attempt < maxRetries && isRetryableStatus(response.status)) {
-      const retryBlockIndex = output.content.length;
-      const retryText = `⏳ ${response.status} — retrying (${attempt + 1}/${maxRetries})…`;
+  const headers = getClaudeCodeHeaders(apiKey, 0, sessionId);
+  const response = await postSseWithRetry({
+    url,
+    headers,
+    body: JSON.stringify({ ...body, stream: true }),
+    signal: options?.signal,
+    onResponse: options?.onResponse,
+    onRetry: (status, attempt, maxRetries) => {
+      const contentIndex = output.content.length;
+      const retryText = `⏳ ${status} — retrying (${attempt}/${maxRetries})…`;
       output.content.push({ type: "text", text: retryText } as any);
-      stream.push({ type: "text_start", contentIndex: retryBlockIndex, partial: output });
-      stream.push({ type: "text_delta", contentIndex: retryBlockIndex, delta: retryText, partial: output });
-      stream.push({ type: "text_end", contentIndex: retryBlockIndex, content: retryText, partial: output });
-      await delay(
-        getRetryDelayMs(attempt, parseRetryAfterMs(response.headers.get("retry-after"))),
-      );
-      response = undefined;
-      continue;
-    }
+      stream.push({ type: "text_start", contentIndex, partial: output });
+      stream.push({ type: "text_delta", contentIndex, delta: retryText, partial: output });
+      stream.push({ type: "text_end", contentIndex, content: retryText, partial: output });
+    },
+  });
 
-    if (response.ok) {
-      throw new Error(`stream response was not SSE (content-type=${contentType || "<missing>"})`);
-    }
-    throw new Error(raw || `HTTP ${response.status}`);
-  }
-
-  if (!response?.body) throw new Error("stream response body missing");
-
-  if (options?.onResponse) {
-    try {
-      options.onResponse(response);
-    } catch {
-      // Best-effort hook
-    }
-  }
+  if (!response.body) throw new Error("stream response body missing");
 
   const blockIndexByEventIndex = new Map<number, number>();
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
 
-  while (true) {
-    const { value, done } = await reader.read();
-    buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
-
-    let parsedChunk = nextSseChunk(buffer);
-    while (parsedChunk) {
-      buffer = parsedChunk.rest;
-      const event = parseSseEvent(parsedChunk.chunk);
-      if (event.data) {
-        const payload = tryParseJson(event.data);
-        if (!payload && event.data !== "[DONE]") {
-          throw new Error(`invalid SSE payload: ${event.data.slice(0, 200)}`);
-        }
-        if (payload) applySsePayloadEvent(payload, output, stream, model, blockIndexByEventIndex);
-      }
-      parsedChunk = nextSseChunk(buffer);
+  for await (const event of iterateSseEvents(response.body)) {
+    if (event.data === "[DONE]") continue;
+    const payload = tryParseJson(event.data);
+    if (!payload) {
+      throw new Error(`invalid SSE payload: ${event.data.slice(0, 200)}`);
     }
-
-    if (done) break;
+    applySsePayloadEvent(payload, output, stream, model, blockIndexByEventIndex);
   }
-
-  const tail = buffer.trim();
-  if (tail) {
-    const event = parseSseEvent(tail);
-    if (event.data && event.data !== "[DONE]") {
-      const payload = tryParseJson(event.data);
-      if (!payload) throw new Error(`invalid SSE payload: ${event.data.slice(0, 200)}`);
-      applySsePayloadEvent(payload, output, stream, model, blockIndexByEventIndex);
-    }
-  }
-
-  const reqId = response.headers.get("x-oneapi-request-id") || undefined;
-  setDiagnosticsField("requestId", reqId);
-
-  writeDebugFile("response", model.id, reqId, {
-    status: response.status,
-    statusText: response.statusText,
-    headers: Object.fromEntries(response.headers.entries()),
-    body: {
-      responseId: output.responseId,
-      stopReason: output.stopReason,
-      usage: output.usage,
-      contentBlocks: output.content.length,
-    },
-    transport: "sse",
-  });
 }
 
 export function buildClaudeCodeRequestBody(

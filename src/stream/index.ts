@@ -36,6 +36,35 @@ export function createEmptyUsage() {
   };
 }
 
+async function interceptPayload(body: any, hook?: (payload: any) => any): Promise<any> {
+  if (!hook) return body;
+  try {
+    const intercepted = await hook(body);
+    if (intercepted && typeof intercepted === "object") {
+      return intercepted;
+    }
+  } catch {
+    // Best-effort hook
+  }
+  return body;
+}
+
+function finalizeSuccess(
+  stream: AssistantMessageEventStream,
+  output: AssistantMessage,
+  startTime: number,
+  signal?: AbortSignal,
+): void {
+  if (signal?.aborted) throw new Error("Request was aborted");
+  setDiagnosticsField("latencyMs", Date.now() - startTime);
+  stream.push({
+    type: "done",
+    reason: output.stopReason as "stop" | "length" | "toolUse",
+    message: output,
+  });
+  stream.end();
+}
+
 export function streamAnyRouter(
   model: Model<Api>,
   context: Context,
@@ -71,26 +100,15 @@ export function streamAnyRouter(
         }
 
         const sessionId = randomUUID();
+        stream.push({ type: "start", partial: output });
 
         if (isCodexModel(model.id, model.api)) {
           setDiagnosticsField("protocol", "codex-responses");
           const turnId = randomUUID();
           const metadata = createCodexMetadata(sessionId, turnId);
           const { body } = buildCodexRequestBody(model, context, options, sessionId, metadata);
+          const finalBody = await interceptPayload(body, options?.onPayload);
 
-          let finalBody = body;
-          if (options?.onPayload) {
-            try {
-              const intercepted = await options.onPayload(finalBody);
-              if (intercepted && typeof intercepted === "object") {
-                finalBody = intercepted as Record<string, any>;
-              }
-            } catch {
-              // Best-effort hook
-            }
-          }
-
-          stream.push({ type: "start", partial: output });
           await tryStreamAnyRouterCodex(
             getCodexResponsesUrl(baseUrl),
             finalBody,
@@ -102,15 +120,7 @@ export function streamAnyRouter(
             metadata,
             options,
           );
-
-          if (options?.signal?.aborted) throw new Error("Request was aborted");
-          setDiagnosticsField("latencyMs", Date.now() - startTime);
-          stream.push({
-            type: "done",
-            reason: output.stopReason as "stop" | "length" | "toolUse",
-            message: output,
-          });
-          stream.end();
+          finalizeSuccess(stream, output, startTime, options?.signal);
           return;
         }
 
@@ -118,20 +128,8 @@ export function streamAnyRouter(
         setDiagnosticsField("protocol", "claude-code");
         const url = `${baseUrl}/v1/messages?beta=true`;
         const { requestBody } = buildClaudeCodeRequestBody(model, context, options, sessionId);
+        const finalRequestBody = await interceptPayload(requestBody, options?.onPayload);
 
-        let finalRequestBody = requestBody;
-        if (options?.onPayload) {
-          try {
-            const intercepted = await options.onPayload(finalRequestBody);
-            if (intercepted && typeof intercepted === "object") {
-              finalRequestBody = intercepted as Record<string, any>;
-            }
-          } catch {
-            // Best-effort hook
-          }
-        }
-
-        stream.push({ type: "start", partial: output });
         await tryStreamAnyRouterCc(
           url,
           finalRequestBody,
@@ -142,15 +140,7 @@ export function streamAnyRouter(
           sessionId,
           options,
         );
-
-        if (options?.signal?.aborted) throw new Error("Request was aborted");
-        setDiagnosticsField("latencyMs", Date.now() - startTime);
-        stream.push({
-          type: "done",
-          reason: output.stopReason as "stop" | "length" | "toolUse",
-          message: output,
-        });
-        stream.end();
+        finalizeSuccess(stream, output, startTime, options?.signal);
       } catch (error) {
         output.stopReason = options?.signal?.aborted ? "aborted" : "error";
         output.errorMessage = error instanceof Error ? `[anyrouter] ${error.message}` : String(error);
