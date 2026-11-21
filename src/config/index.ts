@@ -1,7 +1,7 @@
 import type { ProviderModelConfig } from "../types/index.js";
 import { API_ID } from "../types/index.js";
 
-export const DEFAULT_BASE_URL = "https://anyrouter.top";
+export const DEFAULT_BASE_URL = "https://anyrouter.dev/api";
 
 export const DEFAULT_MODELS: ProviderModelConfig[] = [
   {
