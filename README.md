@@ -150,7 +150,7 @@ To add new models or override existing parameters, use Pi's standard `~/.pi/agen
 {
   "providers": {
     "anyrouter": {
-      "baseUrl": "https://anyrouter.top",
+      "baseUrl": "https://anyrouter.dev/api",
       "models": [
         {
           "id": "my-custom-model",
